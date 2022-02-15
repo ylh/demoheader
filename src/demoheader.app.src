@@ -1,0 +1,15 @@
+{application, demoheader,
+ [{description, "escript to parse source engine demo headers"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {applications,
+   [kernel,
+    stdlib,
+    getopt
+   ]},
+  {env,[]},
+  {modules, []},
+
+  {licenses, ["ISC"]},
+  {links, []}
+ ]}.
