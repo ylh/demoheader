@@ -33,13 +33,13 @@ args(Args, Opts) ->
 		usage(Opts, 1)
 	end,
 	Args =:= [] andalso DU("no arguments given"),
-	{Options, NonOptionArgs} = case getopt:parse(Opts, Args) of
+	{OptArgs, ExtraArgs} = case getopt:parse(Opts, Args) of
 		{error, E} -> DU(getopt:format_error(Opts, E));
 		{ok, Res} -> Res
 	end,
-	lists:member(help, Options) andalso usage(Opts, 0),
-	Headers = lists:filter(fun(A) -> lists:member(A, [?FIELDS]) end, Options),
-	Show = case lists:member(json, Options) of
+	lists:member(help, OptArgs) andalso usage(Opts, 0),
+	Headers = lists:filter(fun(A) -> lists:member(A, [?FIELDS]) end, OptArgs),
+	Show = case lists:member(json, OptArgs) of
 		true -> json_of(case Headers of [] -> [?FIELDS]; Else -> Else end);
 		_ -> case Headers of
 			[One] -> fun(#{One := V}) ->
@@ -48,7 +48,7 @@ args(Args, Opts) ->
 			_ -> DU("without -j, exactly one field must be requested")
 		end
 	end,
-	Parsed = case NonOptionArgs of
+	Parsed = case ExtraArgs of
 		[Single] -> parse(Single);
 		_ -> DU("exactly one file must be specified")
 	end,
@@ -59,7 +59,7 @@ json_of(Keys) ->
 	fun(Map) ->
 		F = fun(Key, Acc) ->
 			#{Key := Value} = Map,
-			[io_lib:format("\"~s\": ~0p", [atom_to_list(Key), Value])|Acc]
+			[io_lib:format("\"~s\": ~0p", [Key, Value])|Acc]
 		end,
 		"{\n\t" ++
 			lists:join(",\n\t", lists:foldl(F, [], lists:reverse(Keys))) ++
