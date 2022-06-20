@@ -58,12 +58,12 @@ args(Args, Opts) ->
 json_of(Keys) ->
 	fun(Map) ->
 		F = fun(Key, Acc) ->
-			#{Key := Value} = Map,
-			[io_lib:format("\"~s\": ~0p", [Key, Value])|Acc]
+			#{Key := V} = Map,
+			[[$", atom_to_binary(Key), <<"\": ">>, io_lib:format("~0p", [V])]|Acc]
 		end,
-		"{\n\t" ++
-			lists:join(",\n\t", lists:foldl(F, [], lists:reverse(Keys))) ++
-		"\n}\n"
+		[<<"{\n\t">>,
+			lists:join(<<",\n\t">>, lists:foldl(F, [], lists:reverse(Keys))),
+		<<"\n}\n">>]
 	end.
 
 -define(X(ATOM, _C, _D, WIDTH, TYPE), fun
