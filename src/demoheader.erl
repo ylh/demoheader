@@ -28,28 +28,25 @@ main(Args) ->
 
 -define(X(ATOM, _C, _D, _W, _T), ATOM).
 args(Args, Opts) ->
-	DU = fun(S) ->
-		err("error: ~s", [S]),
-		usage(Opts, 1)
-	end,
-	Args =:= [] andalso DU("no arguments given"),
+	U = usage(Opts),
+	Args =:= [] andalso die(U, "no arguments given"),
 	{OptArgs, ExtraArgs} = case getopt:parse(Opts, Args) of
-		{error, E} -> DU(getopt:format_error(Opts, E));
+		{error, E} -> die(U, getopt:format_error(Opts, E));
 		{ok, Res} -> Res
 	end,
-	lists:member(help, OptArgs) andalso usage(Opts, 0),
+	lists:member(help, OptArgs) andalso (usage(Opts))(0),
 	Show = case {
 		lists:member(json, OptArgs),
-		lists:filter(fun(A) -> lists:member(A, [?FIELDS]) end, OptArgs)
+		[Arg || Arg <- OptArgs, lists:member(Arg, [?FIELDS])]
 	} of
 		{true, []} -> fun(P) -> P end;
 		{true, Else} -> fun(P) -> maps:with(Else, P) end;
 		{false, [One]} -> fun(P) -> #{One := V} = P, V end;
-		{false, _} -> DU("without -j, exactly one field must be requested")
+		{false, _} -> die(U, "without -j, exactly one field must be requested")
 	end,
 	Parsed = case ExtraArgs of
 		[Single] -> parse(Single);
-		_ -> DU("exactly one file must be specified")
+		_ -> die(U, "exactly one file must be specified")
 	end,
 	io:put_chars([
 		jsone:encode(Show(Parsed), [{indent, 1}, {float_format, [short]}]),
@@ -61,28 +58,26 @@ args(Args, Opts) ->
 	({<<Var:WIDTH/TYPE, Rem/binary>>, Map}) -> {Rem, Map#{ATOM => Var}}
 end).
 parse(Arg) ->
+	H = fun erlang:halt/1,
 	In = case file:open(Arg, [read, binary]) of
 		{ok, I} -> I;
-		{error, E} -> die("~s: ~s", [Arg, file:format_error(E)])
+		{error, E} -> die(H, "~s: ~s", [Arg, file:format_error(E)])
 	end,
 	Bin = case file:read(In, 1072) of
 		{ok, <<"HL2DEMO\0", Rem:1064/bytes>>} -> Rem;
-		{ok, <<_:1072/bytes>>} -> die("no \"HL2DEMO\" at start of file", []);
-		{ok, _} -> die("could not read 1072 bytes", []);
-		{error, EE} -> die("while reading ~s: ~s", [Arg, file:format_error(EE)])
+		{ok, <<_:1072/bytes>>} -> die(H, "no \"HL2DEMO\" at start of file");
+		{ok, _} -> die(H, "could not read 1072 bytes");
+		{error, EE} -> die(H, "reading ~s: ~s", [Arg, file:format_error(EE)])
 	end,
 	{<<>>, Map} = lists:foldl(fun(F, A) -> F(A) end, {Bin, #{}}, [?FIELDS]),
 	maps:map(fun
-		(_, <<S/binary>>) ->
-			[Head|_] = binary:split(S, <<0>>),
-			Head;
-		(_, V) ->
-			V
+		(_, <<S/binary>>) -> [Head|_] = binary:split(S, <<0>>), Head;
+		(_, V) -> V
 	end, Map).
 -undef(X).
 
 -define(X(_A, CHAR, _D, _W, _T), CHAR).
-usage(Opts, Ret) ->
+usage(Opts) -> fun(Ret) ->
 	err("Usage: ~w -j [-~s] demo.dem", [?MODULE, [?FIELDS]]),
 	err("       ~w -~s demo.dem\n", [?MODULE, [?FIELDS]]),
 	err(getopt:usage_options(Opts)),
@@ -91,13 +86,11 @@ usage(Opts, Ret) ->
 "and it will be printed on standard output. If -j is given, any number of\n"
 "header elements may be selected; specifying none is equivalent to specifying\n"
 "all of them. Keys are the long forms of their corresponding flags."),
-	halt(Ret).
+	halt(Ret)
+end.
 -undef(X).
 
-die(Fmt, Args) ->
-	err("error: " ++ Fmt, Args),
-	halt(1).
-err(Str) ->
-	err("~s", [Str]).
-err(Fmt, Args) ->
-	io:format(standard_error, Fmt ++ "\n", Args).
+die(With, Fmt) -> die(With, Fmt, []).
+die(With, Fmt, Args) -> err("error: " ++ Fmt, Args), With(1).
+err(Str) -> err("~s", [Str]).
+err(Fmt, Args) -> io:format(standard_error, Fmt ++ "\n", Args).
