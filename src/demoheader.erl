@@ -38,33 +38,24 @@ args(Args, Opts) ->
 		{ok, Res} -> Res
 	end,
 	lists:member(help, OptArgs) andalso usage(Opts, 0),
-	Headers = lists:filter(fun(A) -> lists:member(A, [?FIELDS]) end, OptArgs),
-	Show = case lists:member(json, OptArgs) of
-		true -> json_of(case Headers of [] -> [?FIELDS]; Else -> Else end);
-		_ -> case Headers of
-			[One] -> fun(#{One := V}) ->
-				io_lib:format(case V of [_|_] -> "~s\n"; _ -> "~w\n" end, [V])
-			end;
-			_ -> DU("without -j, exactly one field must be requested")
-		end
+	Show = case {
+		lists:member(json, OptArgs),
+		lists:filter(fun(A) -> lists:member(A, [?FIELDS]) end, OptArgs)
+	} of
+		{true, []} -> fun(P) -> P end;
+		{true, Else} -> fun(P) -> maps:with(Else, P) end;
+		{false, [One]} -> fun(P) -> #{One := V} = P, V end;
+		{false, _} -> DU("without -j, exactly one field must be requested")
 	end,
 	Parsed = case ExtraArgs of
 		[Single] -> parse(Single);
 		_ -> DU("exactly one file must be specified")
 	end,
-	io:put_chars(Show(Parsed)).
+	io:put_chars([
+		jsone:encode(Show(Parsed), [{indent, 1}, {float_format, [short]}]),
+		$\n
+	]).
 -undef(X).
-
-json_of(Keys) ->
-	fun(Map) ->
-		F = fun(Key, Acc) ->
-			#{Key := V} = Map,
-			[[$", atom_to_binary(Key), <<"\": ">>, io_lib:format("~0p", [V])]|Acc]
-		end,
-		[<<"{\n\t">>,
-			lists:join(<<",\n\t">>, lists:foldl(F, [], lists:reverse(Keys))),
-		<<"\n}\n">>]
-	end.
 
 -define(X(ATOM, _C, _D, WIDTH, TYPE), fun
 	({<<Var:WIDTH/TYPE, Rem/binary>>, Map}) -> {Rem, Map#{ATOM => Var}}
@@ -84,7 +75,7 @@ parse(Arg) ->
 	maps:map(fun
 		(_, <<S/binary>>) ->
 			[Head|_] = binary:split(S, <<0>>),
-			unicode:characters_to_list(Head);
+			Head;
 		(_, V) ->
 			V
 	end, Map).
