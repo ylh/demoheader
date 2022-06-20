@@ -16,43 +16,39 @@
 	?X('signon-length', $l, "(integer)", 32, signed-little)
 ).
 
--define(X(ATOM, CHAR, DESC, _W, _T), F(ATOM, CHAR, DESC)).
+-define(X(ATOM, CHAR, DESC, _W, _T), field(ATOM, CHAR, DESC)).
 main(Args) ->
-	F = fun(A, C, D) -> {A, C, atom_to_list(A), undefined, D} end,
-	args(Args, [
-		F(json, $j, "Emit JSON"),
+	Opts = [
+		field(json, $j, "Emit JSON"),
 		?FIELDS,
-		F(help, $h, "Show this help")
-	]).
--undef(X).
-
--define(X(ATOM, _C, _D, _W, _T), ATOM).
-args(Args, Opts) ->
+		field(help, $h, "Show this help")
+	],
 	U = usage(Opts),
 	Args =:= [] andalso die(U, "no arguments given"),
 	{OptArgs, ExtraArgs} = case getopt:parse(Opts, Args) of
 		{error, E} -> die(U, getopt:format_error(Opts, E));
 		{ok, Res} -> Res
 	end,
-	lists:member(help, OptArgs) andalso (usage(Opts))(0),
+	[U(0) || help <- OptArgs],
 	Show = case {
 		lists:member(json, OptArgs),
-		[Arg || Arg <- OptArgs, lists:member(Arg, [?FIELDS])]
+		[Arg || Arg <- OptArgs, {A, _C, _D, _W, _T} <- [?FIELDS], Arg == A]
 	} of
-		{true, []} -> fun(P) -> P end;
-		{true, Else} -> fun(P) -> maps:with(Else, P) end;
-		{false, [One]} -> fun(P) -> #{One := V} = P, V end;
-		{false, _} -> die(U, "without -j, exactly one field must be requested")
+		{true, []} -> fun json/1;
+		{true, Else} -> fun(M) -> json(maps:with(Else, M)) end;
+		{_, [O]} -> fun(#{O := <<B/binary>>}) -> B; (#{O := V}) -> json(V) end;
+		_ -> die(U, "without -j, exactly one field must be requested")
 	end,
 	Parsed = case ExtraArgs of
 		[Single] -> parse(Single);
 		_ -> die(U, "exactly one file must be specified")
 	end,
-	io:put_chars([
-		jsone:encode(Show(Parsed), [{indent, 1}, {float_format, [short]}]),
-		$\n
-	]).
+	io:put_chars([Show(Parsed), $\n]).
 -undef(X).
+
+field(Atom, Char, Desc) -> {Atom, Char, atom_to_list(Atom), undefined, Desc}.
+
+json(Term) -> jsone:encode(Term, [{indent, 1}, {float_format, [short]}]).
 
 -define(X(ATOM, _C, _D, WIDTH, TYPE), fun
 	({<<Var:WIDTH/TYPE, Rem/binary>>, Map}) -> {Rem, Map#{ATOM => Var}}
@@ -92,5 +88,6 @@ end.
 
 die(With, Fmt) -> die(With, Fmt, []).
 die(With, Fmt, Args) -> err("error: " ++ Fmt, Args), With(1).
+
 err(Str) -> err("~s", [Str]).
 err(Fmt, Args) -> io:format(standard_error, Fmt ++ "\n", Args).
